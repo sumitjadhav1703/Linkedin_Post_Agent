@@ -1,0 +1,196 @@
+@import "tailwindcss";
+
+/*
+ * Copy Desk — a print-desk palette, not a SaaS one.
+ *
+ * Two atmospheres share these tokens:
+ *   default  — warm paper. The human editorial mode lives here.
+ *   .machine — the same tokens shifted cool and grey, for the autonomous
+ *              ledger. Same type, same spacing, different temperature, so the
+ *              two modes read as different rooms rather than different labels.
+ *
+ * Dark mode is driven purely by prefers-color-scheme: the variables below flip,
+ * and nothing has to toggle a class at runtime, so there is no first-paint flash.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  --paper: #faf8f5;
+  --surface: #ffffff;
+  --surface-sunk: #f3efe9;
+  --ink: #1a1714;
+  --ink-soft: #57514a;
+  --ink-faint: #8c847a;
+  --rule: rgb(26 23 20 / 0.13);
+  --rule-strong: rgb(26 23 20 / 0.28);
+  --accent: #c2410c;
+  --accent-wash: rgb(194 65 12 / 0.07);
+  --ok: #047857;
+  --ok-wash: rgb(4 120 87 / 0.09);
+  --bad: #b91c1c;
+  --bad-wash: rgb(185 28 28 / 0.07);
+  --warn: #b45309;
+  --warn-wash: rgb(180 83 9 / 0.09);
+  --texture: rgb(26 23 20 / 0.045);
+}
+
+.machine {
+  --paper: #f2f3f4;
+  --surface: #fbfbfc;
+  --surface-sunk: #e8eaec;
+  --ink: #15181b;
+  --ink-soft: #4b5259;
+  --ink-faint: #838c94;
+  --rule: rgb(21 24 27 / 0.13);
+  --rule-strong: rgb(21 24 27 / 0.3);
+  --texture: rgb(21 24 27 / 0.05);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #100f0d;
+    --surface: #1a1815;
+    --surface-sunk: #131210;
+    --ink: #f2ede5;
+    --ink-soft: #a89f92;
+    --ink-faint: #6f675d;
+    --rule: rgb(242 237 229 / 0.14);
+    --rule-strong: rgb(242 237 229 / 0.32);
+    --accent: #f97316;
+    --accent-wash: rgb(249 115 22 / 0.12);
+    --ok: #34d399;
+    --ok-wash: rgb(52 211 153 / 0.12);
+    --bad: #f87171;
+    --bad-wash: rgb(248 113 113 / 0.12);
+    --warn: #fbbf24;
+    --warn-wash: rgb(251 191 36 / 0.12);
+    --texture: rgb(242 237 229 / 0.05);
+  }
+
+  .machine {
+    --paper: #0c0e10;
+    --surface: #16191c;
+    --surface-sunk: #101315;
+    --ink: #e8edf1;
+    --ink-soft: #99a4ad;
+    --ink-faint: #626c74;
+    --rule: rgb(232 237 241 / 0.14);
+    --rule-strong: rgb(232 237 241 / 0.32);
+    --texture: rgb(232 237 241 / 0.05);
+  }
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-sunk: var(--surface-sunk);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+  --color-accent: var(--accent);
+  --color-accent-wash: var(--accent-wash);
+  --color-ok: var(--ok);
+  --color-ok-wash: var(--ok-wash);
+  --color-bad: var(--bad);
+  --color-bad-wash: var(--bad-wash);
+  --color-warn: var(--warn);
+  --color-warn-wash: var(--warn-wash);
+
+  --font-serif: "Cormorant Garamond", ui-serif, Georgia, "Times New Roman", serif;
+  --font-mono: "Space Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+
+  --animate-rise: rise 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-sweep: sweep 1.6s ease-in-out infinite;
+  --animate-blink: blink 1.15s step-end infinite;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* One focus treatment everywhere, visible against both temperatures. */
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  ::selection {
+    background: var(--accent-wash);
+  }
+}
+
+@utility label {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+}
+
+/* Fine dot grid — a press sheet, not a gradient. */
+@utility dot-grid {
+  background-image: radial-gradient(circle at 1px 1px, var(--texture) 1px, transparent 0);
+  background-size: 22px 22px;
+}
+
+/* Drafts are the substance of the screen: long measure, real leading, and
+   line breaks preserved exactly as the model wrote them. */
+@utility draft-body {
+  font-family: var(--font-serif);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.55;
+  letter-spacing: 0.005em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
