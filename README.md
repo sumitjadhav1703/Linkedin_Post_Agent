@@ -1,22 +1,53 @@
-# LinkedIn Post Generator — Human-in-the-Loop vs Autonomous
+# LinkedIn Post Agent
 
-Two LangGraph agents that write LinkedIn posts. One stops and waits for a human to approve every draft. The other reviews its own work with a second LLM and iterates until it passes. A frontend toggle picks which one runs.
+A LangGraph-based intelligent agent that generates LinkedIn posts using two distinct execution models: a Human-in-the-Loop (HITL) workflow that pauses for explicit approval, and an autonomous loop that relies on an LLM-driven reviewer to iterate independently. By sharing the exact same writer chain, this project isolates the review mechanism to clearly demonstrate how human gating changes application architecture, state management, and deployment constraints.
 
-The point isn't the posts. It's that the two pipelines are **identical except for the review mechanism**, so the comparison actually isolates the thing being compared.
+## Demo
 
-```console
-$ diff <(grep -o 'add_node("[a-z_]*"' app/graph_hitl.py) <(grep -o 'add_node("[a-z_]*"' app/graph_auto.py)
-< add_node("human_review"
-> add_node("reviewer"
-```
+**Live Frontend:** [https://linkedin-post-agent-two.vercel.app/](https://linkedin-post-agent-two.vercel.app/)
 
-Same writer model, same temperature, same prompts, same search tool, same retry logic, same stopping conditions — all imported from one shared module. One node differs. That's the demo.
+*(Note: The backend may spin down after inactivity on the Render free tier, meaning the first request could take up to 30-60 seconds to wake up.)*
 
-## The two graphs
+This project demonstrates two distinct generation flows:
+- **Human-in-the-Loop (HITL):** Generates a draft, suspends execution, and waits for a human to approve or provide feedback.
+- **Autonomous Generation:** Generates a draft, self-evaluates using a separate LLM reviewer node, and iteratively refines the post until it meets quality standards (up to a configured attempt limit).
+
+*(Note: UI screenshots can be added here to demonstrate the side-by-side comparison)*
+
+## Why This Project?
+
+Building reliable LLM applications often comes down to the tradeoff between autonomy and control. This project tackles the engineering problem of generating LinkedIn content by presenting two identical pipelines that diverge only at the review step.
+
+Comparing human approval with autonomous execution reveals how "agentic" workflows behave differently under supervision. More importantly, it demonstrates how adding a human to the loop drastically changes the backend requirements: an autonomous process runs start-to-finish in a single HTTP request, whereas a human-gated process requires the graph state to be suspended, persisted, and accurately resumed later.
+
+## Features
+
+- **Human-in-the-Loop Workflow:** Pauses LangGraph execution using `interrupt()`, awaiting explicit human approval or revision instructions before proceeding.
+- **Autonomous Workflow:** Utilizes a structured-output LLM reviewer to automatically grade drafts, passing feedback back to the writer for autonomous iteration.
+- **Shared Core Logic:** Both workflows import the exact same LangChain generation sequence, ensuring accurate side-by-side comparison.
+- **Web Search Augmentation:** Integrates the Tavily search tool (optional) to pull in current data when generating posts.
+- **State Management:** Utilizes LangGraph's `MemorySaver` to checkpoint and resume in-process graph state.
+- **React/Vite Frontend:** A dedicated client for testing both the interactive HITL flow and the polling-based autonomous background job.
+
+## Human-in-the-Loop vs Autonomous
+
+This project isolates the review mechanism to show how the architecture changes when a human is involved.
+
+**Human-in-the-Loop (HITL)**
+`User → Writer Node → Extracted Draft → Graph Suspends (interrupt) → Human Review (approve/reject) → Graph Resumes → Final Output`
+
+Because the human review step takes time, the graph must pause. This requires a checkpointer (`MemorySaver` here) and a thread identity so the process can be put down and picked back up later. This single requirement dictates that subsequent requests must land on the same instance that holds the state in memory.
+
+**Autonomous**
+`User → Writer Node → Extracted Draft → LLM Reviewer Node (approve/reject) → Loop back to Writer → Final Output`
+
+The autonomous loop requires neither suspension nor a checkpointer. It runs from start to finish in one background execution. The challenge here is ensuring the LLM reviewer's verdict is parsed reliably and that it knows when to stop iterating (e.g., maximum attempts).
+
+## Architecture
 
 ```mermaid
 flowchart LR
-    subgraph shared["shared writer chain (app/writer.py)"]
+    subgraph shared["Shared Writer Chain (app/writer.py)"]
         direction LR
         P[prepare_attempt] --> W[writer]
         W -->|tool_calls| T[tools]
@@ -28,149 +59,138 @@ flowchart LR
     R -->|approved / max attempts| E[END]
 ```
 
-`review` is the only swappable part:
+- **Frontend:** React + Vite + Tailwind UI
+- **API Layer:** FastAPI exposing HTTP routes for starting and resuming graphs
+- **Agent Orchestration:** LangGraph handling state graphs, conditional edges, and interrupts
+- **LLM Engine:** Mistral AI via LangChain for drafting and reviewing
+- **Tooling:** Tavily Search for real-time web context
 
-| | Human-in-the-loop | Autonomous |
+## Tech Stack
+
+| Category | Technology |
+|---|---|
+| **Frontend** | React (19), Vite (8), Tailwind CSS (4), TypeScript |
+| **Backend** | Python 3.13, FastAPI, Uvicorn |
+| **Agent Orchestration** | LangGraph, LangChain Core |
+| **AI/LLM** | Mistral AI (`langchain-mistralai`) |
+| **Search/Tools** | Tavily (`langchain-tavily`) |
+| **Deployment** | Vercel (Frontend), Render (Backend) |
+
+## Project Structure
+
+- `app/`
+  - `api.py`: FastAPI routes handling the HITL and Auto endpoints.
+  - `config.py`: Environment checks, model configurations, and logging setup.
+  - `state.py`: The `PostState` schema shared by both graphs.
+  - `writer.py`: The shared LangGraph chain (prepare, write, search, extract).
+  - `reviewer.py`: The structured-output LLM reviewer for the autonomous graph.
+  - `graph_hitl.py`: The HITL graph utilizing the `interrupt()` node and `MemorySaver`.
+  - `graph_auto.py`: The autonomous graph utilizing the LLM reviewer node.
+  - `jobs.py`: In-memory thread and job trackers.
+- `cli_hitl.py` & `cli_auto.py`: Terminal-based runners for debugging without the API.
+- `frontend/`: The React + Vite client application.
+
+## How It Works
+
+### 1. Human-in-the-Loop Flow
+1. The frontend calls `POST /api/hitl/start` with a topic.
+2. The `app_hitl` graph executes the shared writer chain.
+3. Upon extracting the draft, the graph hits the `human_review` node, calls `interrupt()`, and pauses.
+4. The API returns the draft to the frontend with an `awaiting_review` status.
+5. The human reviews the draft and submits feedback via `POST /api/hitl/resume`.
+6. The graph resumes. If approved, it routes to `END`. If rejected, it routes back to `prepare_attempt` with the feedback appended to the state.
+
+### 2. Autonomous Flow
+1. The frontend calls `POST /api/auto/start` with a topic, receiving an immediate HTTP 202 response and a `job_id`.
+2. The `app_auto` graph begins executing in a background thread.
+3. After the writer extracts a draft, it passes to the `reviewer` node, which prompts an LLM to evaluate the post.
+4. The reviewer outputs a structured decision (approve/reject + critique).
+5. The graph loops automatically until approved or the `MAX_ATTEMPTS` limit is reached.
+6. The frontend polls `GET /api/auto/status/{job_id}` to stream the history of rejected drafts and the final output.
+
+## Local Development
+
+### Backend Setup
+
+1. Clone the repository and configure the virtual environment:
+   ```bash
+   uv venv
+   VIRTUAL_ENV=.venv uv pip install -r requirements.txt
+   ```
+2. Create a `.env` file in the root directory (see Environment Variables).
+3. Start the FastAPI server:
+   ```bash
+   .venv/bin/python -m uvicorn app.api:app --reload
+   ```
+
+### Frontend Setup
+
+1. Navigate to the frontend directory:
+   ```bash
+   cd frontend
+   ```
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+3. Start the Vite development server:
+   ```bash
+   npm run build && npm run preview
+   ```
+   *(Alternatively, run `npm run preview` with background execution during development)*
+
+## Environment Variables
+
+| Variable | Used By | Purpose |
 |---|---|---|
-| Review node | `interrupt()` — graph suspends | LLM reviewer with structured output |
-| Checkpointer | `MemorySaver` (required — state must survive the pause) | none (nothing pauses) |
-| Latency | as long as the human takes | ~15–45s for up to 3 rounds |
-| API shape | start → resume → resume … | start → poll → poll … |
-| Fails toward | whatever the human says | rejection, on unparseable verdicts |
+| `MISTRAL_API_KEY` | Backend | Required. Authenticates calls to the Mistral AI API for both writing and reviewing. |
+| `TAVILY_API_KEY` | Backend | Optional. Enables web search augmentation if present. |
+| `LOG_LEVEL` | Backend | Optional. Sets Python logging level (e.g., INFO, DEBUG). |
+| `MAX_ATTEMPTS` | Backend | Optional. Maximum revision rounds before the graph forces an end (default: 3). |
+| `CORS_ORIGINS` | Backend | Optional. Allows specific frontend URLs to access the API. |
+| `VITE_API_BASE` | Frontend | Optional. Defines the base URL the frontend uses to contact the backend (e.g., `http://localhost:8000`). |
 
-### Why that difference matters
+*Note: Secrets must never be committed to Git. The backend checks for key presence without logging values.*
 
-The human-gated loop needs a **checkpointer** and a **thread identity**, because the process has to put the graph down and pick it back up later. That single requirement is what drags in every hosting constraint in [DEPLOYMENT.md](DEPLOYMENT.md) — an in-memory checkpointer means the resume request must reach the same process that served the start request.
+## API Documentation
 
-The autonomous loop needs neither. It runs start to finish in one call. It just has to be right without supervision, which is a different problem: the reviewer's verdict has to be parsed reliably, and it has to know when to give up.
-
-## Layout
-
-```
-app/
-  config.py      env checks, model IDs, limits, logging
-  state.py       PostState — the schema both graphs share
-  prompts.py     writer + reviewer system prompts
-  llm.py         model factories, invoke_with_retry(), LLMError
-  tools.py       Tavily search; degrades to [] with no key
-  writer.py      the shared chain + loop router      <- both graphs import this
-  reviewer.py    structured-output verdict + fallback parser
-  graph_hitl.py  shared chain + interrupt() node
-  graph_auto.py  shared chain + LLM reviewer node
-  jobs.py        in-process job/session stores
-  runner.py      streams the auto graph into the job store
-  api.py         FastAPI routes
-cli_hitl.py      terminal version of the HITL loop
-cli_auto.py      terminal version of the autonomous loop
-frontend/        Vite + React client for both modes — see frontend/README.md
-```
-
-## Setup
-
-Needs Python 3.13 and a Mistral API key. Tavily is optional — without it, search is disabled and the writer runs unaugmented.
-
-```bash
-uv venv
-VIRTUAL_ENV=.venv uv pip install -r requirements.txt
-```
-
-Create a `.env`:
-
-```
-MISTRAL_API_KEY=...
-TAVILY_API_KEY=...        # optional
-LOG_LEVEL=INFO            # optional; DEBUG logs full drafts
-MAX_ATTEMPTS=3            # optional
-CORS_ORIGINS=http://localhost:5173
-```
-
-Confirm it loaded — this reports key *presence*, never values:
-
-```bash
-curl localhost:8000/api/health
-```
-
-## Run
-
-```bash
-# API
-.venv/bin/python -m uvicorn app.api:app --reload
-
-# or the terminal versions
-.venv/bin/python cli_hitl.py
-.venv/bin/python cli_auto.py
-```
-
-The browser client lives in [`frontend/`](frontend) and expects the API on port 8000:
-
-```bash
-cd frontend && npm install && npm run dev   # http://localhost:5173
-```
-
-## API
-
-`thread_id` and `job_id` are always generated server-side. Clients echo back what they were given.
-
-### Human-in-the-loop
-
-```jsonc
-POST /api/hitl/start     { "topic": "...", "enable_search": false }
--> { "thread_id": "hex", "status": "awaiting_review", "draft": "...",
-     "attempt": 1, "instruction": "Type 'approved' to accept, or ..." }
-
-POST /api/hitl/resume    { "thread_id": "...", "feedback": "approved | critique" }
--> { "status": "awaiting_review", "draft": "...", "attempt": 2, ... }   // another round
--> { "status": "completed", "draft": "...", "attempt": 2,
-     "is_approved": true, "stop_reason": "approved" }                   // or "max_attempts"
-```
-
-Loop while `status` is `awaiting_review`; render the post on `completed`.
+### Human-in-the-Loop
+- `POST /api/hitl/start`: Starts the flow. Accepts `{ "topic": "...", "enable_search": false }`. Returns the first draft, `thread_id`, and status `awaiting_review`.
+- `POST /api/hitl/resume`: Submits feedback. Accepts `{ "thread_id": "...", "feedback": "approved | critique" }`. Returns either another draft (`awaiting_review`) or the final output (`completed`).
 
 ### Autonomous
+- `POST /api/auto/start`: Initiates the background loop. Accepts `{ "topic": "...", "enable_search": false }`. Returns `202 Accepted` and a `job_id`.
+- `GET /api/auto/status/{job_id}`: Polls for status. Returns job state (`running`, `completed`, or `error`), current attempt count, history of failed drafts, and the final draft.
 
-```jsonc
-POST /api/auto/start     { "topic": "...", "enable_search": false }     -> 202
--> { "job_id": "hex", "status": "running" }
+### Health
+- `GET /api/health`: Returns API key presence and current LLM model configuration.
 
-GET  /api/auto/status/{job_id}      // poll ~1.5s
--> { "status": "running|completed|error", "attempt": 2,
-     "history": [ { "attempt": 1, "draft": "...", "approved": false, "feedback": "..." } ],
-     "draft": "...", "is_approved": true, "stop_reason": "approved", "error": null }
-```
+## Deployment
 
-`history` grows as the loop iterates, so the UI can show each rejected draft alongside the critique that killed it.
+**Frontend:** Deployed via Vercel at [https://linkedin-post-agent-two.vercel.app/](https://linkedin-post-agent-two.vercel.app/). It uses the `VITE_API_BASE` environment variable to point to the production backend.
 
-### Errors
+**Backend:** Deployed via Render. It uses `CORS_ORIGINS` to allow requests explicitly from the Vercel frontend.
 
-| Code | Meaning |
-|---|---|
-| `400` | blank topic |
-| `404` | unknown or expired `thread_id` / `job_id` |
-| `502` | LLM call failed after retries — `{"detail": "..."}` |
+**Important Deployment Note:** The backend currently runs on Render's Free tier, which spins down after 15 minutes of inactivity.
+- The first request after a sleep period may take longer (cold start).
+- **Crucially:** Because the HITL flow relies on `MemorySaver` (an in-process Python dictionary), if the backend spins down while a draft is awaiting human review, the session state is lost, resulting in a 404 on the next resume request.
 
-An expired `thread_id` is a real scenario, not just a bad request: sessions live in process memory, so a restart drops them.
+## Important Architecture / Design Decisions
 
-## Design notes
+- **Why LangGraph:** LangGraph provides native support for cyclical workflows (loops) and explicit interruptions. This makes it trivial to represent an iterative writing process that routes back on itself.
+- **Shared Writer Logic:** By sharing the exact same `app/writer.py` pipeline, the comparison between HITL and Autonomous is isolated entirely to the review node, preventing prompt drift between the two modes.
+- **In-Memory Checkpointing:** The project deliberately uses `MemorySaver` for state. While this means state is wiped on server restarts, it perfectly illustrates the architectural cost of human suspension: a real production deployment would require a persistent checkpointer (like Postgres or SQLite) to safely survive multi-instance scaling and cold starts.
+- **Structured Output parsing:** The autonomous reviewer attempts to use Pydantic structured output. If unsupported, it fails closed to an anchored regex check, ensuring format drift results in a safe rejection rather than an unverified approval.
 
-**One shared writer, not two matching prompts.** Both graphs call `add_writer_chain()`. Two copies of an "identical" prompt drift the first time someone edits one; a shared import can't.
+## Security and Limitations
 
-**Tool results route back to the writer, not forward.** `tools → writer`, so the model can actually use what it searched for. Routing search results forward to the review step instead means the reviewer grades an empty draft and the search is decorative — which is exactly what the earlier version of this code did.
+- **No Authentication / Rate Limiting:** The API is unauthenticated and unprotected by rate limits. Anyone with the URL can trigger LLM generation. This is a deliberate tradeoff for a portfolio demo.
+- **In-Memory Sessions:** As noted, scaling the backend beyond one instance or deploying on a scale-to-zero serverless platform (like Render Free) will result in lost HITL sessions because `MemorySaver` state cannot be shared across processes.
+- **Error Handling Check:** The architecture explicitly checks for LLM failure states before suspension. If an API call fails, the graph routes straight to `END` and returns a 502 rather than asking a human to review a system error.
 
-**Verdict parsing is structured-first, and fails closed.** The reviewer uses `.with_structured_output()` with a Pydantic model. If a provider doesn't support it, it falls back to a regex anchored on `VERDICT:` — anchoring matters, because an unanchored substring test reads `VERDICT: REJECTED (this is not approved yet)` as an approval. If nothing parses, the draft is treated as **rejected**: format drift then costs one extra revision, bounded by `MAX_ATTEMPTS`, instead of shipping a post nothing ever graded.
+## Future Improvements
 
-**Errors end the graph before review.** A failed LLM call sets `state["error"]` and routes straight to `END`. Without that, `extract_draft` reads the last message — still the unanswered instruction prompt — and hands it to the review node as if it were a draft. The result reads like a plausible post and returns `200`. Recording an error isn't enough; something has to check it before the graph pauses.
-
-**Search is capped at `MAX_TOOL_ROUNDS = 2`** per attempt, so a model that keeps deciding to search can't stall a live demo.
-
-## Scope
-
-This is a portfolio demo, not a service. Deliberate consequences:
-
-- **In-process state.** `MemorySaver` and the job store are plain dicts. Must run as a single worker; a restart drops in-flight sessions. See [DEPLOYMENT.md](DEPLOYMENT.md) for what that constrains — the fix is a SQLite or Postgres checkpointer, intentionally not done here.
-- **No auth, no rate limiting.** Anything with the URL can spend your API credits.
-- **No tests committed.** Verification was run ad hoc against the live API; the results are recorded in [PLAN.md](PLAN.md). First thing to add if this grows.
-
-## Docs
-
-- [PLAN.md](PLAN.md) — the audit of the original scripts, the design, and what was verified
-- [DEPLOYMENT.md](DEPLOYMENT.md) — hosting comparison and the `interrupt()`/checkpointer constraint
+- **Persistent Checkpoint Storage:** Replace `MemorySaver` with `PostgresSaver` or `SqliteSaver` to ensure HITL sessions survive process restarts and allow horizontal scaling.
+- **Authentication & Rate Limiting:** Add basic API key validation or user sessions to protect LLM credits.
+- **Production-Grade Deployment:** Upgrade backend hosting to an always-on tier to prevent cold starts and session eviction.
+- **Evaluation Framework:** Introduce an evaluation metric (e.g., LangSmith) to score generated posts against successful real-world LinkedIn content.
