@@ -1,5 +1,19 @@
 # LinkedIn Post Agent
 
+[![Python](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)](https://python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115.0-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+[![Vite](https://img.shields.io/badge/Vite-8-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
+[![LangGraph](https://img.shields.io/badge/LangGraph-0.2.60-ff7f50)](https://langchain-ai.github.io/langgraph/)
+[![Mistral](https://img.shields.io/badge/Mistral_AI-0.2.0-orange?logo=mistral&logoColor=black)](https://mistral.ai/)
+[![Tavily](https://img.shields.io/badge/Tavily-0.1.0-blue)](https://tavily.com/)
+[![Vercel](https://img.shields.io/badge/Vercel-Deployed-000000?logo=vercel&logoColor=white)](https://linkedin-post-agent-two.vercel.app/)
+[![Render](https://img.shields.io/badge/Render-Deployed-46E3B7?logo=render&logoColor=white)](https://linkedin-post-agent-6mrm.onrender.com)
+[![Live Demo](https://img.shields.io/badge/Live_Demo-linkedin--post--agent--two.vercel.app-success)](https://linkedin-post-agent-two.vercel.app/)
+
+
+![Application Preview](docs/screenshots/home.png)
+
 A LangGraph-based intelligent agent that generates LinkedIn posts using two distinct execution models: a Human-in-the-Loop (HITL) workflow that pauses for explicit approval, and an autonomous loop that relies on an LLM-driven reviewer to iterate independently. By sharing the exact same writer chain, this project isolates the review mechanism to clearly demonstrate how human gating changes application architecture, state management, and deployment constraints.
 
 ## Demo
@@ -12,7 +26,6 @@ This project demonstrates two distinct generation flows:
 - **Human-in-the-Loop (HITL):** Generates a draft, suspends execution, and waits for a human to approve or provide feedback.
 - **Autonomous Generation:** Generates a draft, self-evaluates using a separate LLM reviewer node, and iteratively refines the post until it meets quality standards (up to a configured attempt limit).
 
-*(Note: UI screenshots can be added here to demonstrate the side-by-side comparison)*
 
 ## Why This Project?
 
@@ -90,9 +103,15 @@ flowchart LR
 - `cli_hitl.py` & `cli_auto.py`: Terminal-based runners for debugging without the API.
 - `frontend/`: The React + Vite client application.
 
+
+### Generated LinkedIn Post
+![Generated LinkedIn Post](docs/screenshots/generated-post.png)
+
 ## How It Works
 
 ### 1. Human-in-the-Loop Flow
+![Human-in-the-Loop](docs/screenshots/human-in-the-loop.png)
+
 1. The frontend calls `POST /api/hitl/start` with a topic.
 2. The `app_hitl` graph executes the shared writer chain.
 3. Upon extracting the draft, the graph hits the `human_review` node, calls `interrupt()`, and pauses.
@@ -101,6 +120,8 @@ flowchart LR
 6. The graph resumes. If approved, it routes to `END`. If rejected, it routes back to `prepare_attempt` with the feedback appended to the state.
 
 ### 2. Autonomous Flow
+![Autonomous Mode](docs/screenshots/autonomous.png)
+
 1. The frontend calls `POST /api/auto/start` with a topic, receiving an immediate HTTP 202 response and a `job_id`.
 2. The `app_auto` graph begins executing in a background thread.
 3. After the writer extracts a draft, it passes to the `reviewer` node, which prompts an LLM to evaluate the post.
