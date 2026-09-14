@@ -114,7 +114,7 @@ def health() -> dict:
     """Report configuration and key presence. Never exposes key values."""
     return {
         "status": "ok",
-        "mistral_key": config.has_key(config.MISTRAL_KEY_NAME),
+        "groq_key": config.has_key(config.GROQ_KEY_NAME),
         "tavily_key": config.has_key(config.TAVILY_KEY_NAME),
         "writer_model": config.WRITER_MODEL,
         "reviewer_model": config.REVIEWER_MODEL,
