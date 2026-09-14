@@ -81,13 +81,15 @@ def prepare_attempt_node(state: PostState) -> dict:
     feedback = state.get("review_feedback", "")
 
     if attempt == 1:
-    instruction = prompts.first_attempt_instruction(
-        topic,
-        search_enabled=bool(state.get("enable_search"))
-        and tools.search_available(),
+        instruction = prompts.first_attempt_instruction(
+            topic,
+            search_enabled=(
+                bool(state.get("enable_search"))
+                and tools.search_available()
+        ),
     )
     else:
-    instruction = prompts.revision_instruction(topic, feedback)
+        instruction = prompts.revision_instruction(topic, feedback)
 
     logger.info("Starting attempt %d/%d", attempt, config.MAX_ATTEMPTS)
 
