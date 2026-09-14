@@ -14,11 +14,18 @@ load_dotenv()
 # Both graphs use the same writer so the only difference between them is the
 # review mechanism. "mistral-small-latest" is the current alias; the bare
 # "mistral-small" alias is deprecated and "mistral-7b-instruct" is retired.
-WRITER_MODEL = os.environ.get("WRITER_MODEL", "mistral-small-latest")
+WRITER_MODEL = os.environ.get(
+    "WRITER_MODEL",
+    "openai/gpt-oss-20b",
+)
+
 WRITER_TEMPERATURE = 0.7
 
-# Same model, lower temperature: a reviewer should be consistent, not creative.
-REVIEWER_MODEL = os.environ.get("REVIEWER_MODEL", "mistral-small-latest")
+REVIEWER_MODEL = os.environ.get(
+    "REVIEWER_MODEL",
+    "openai/gpt-oss-20b",
+)
+
 REVIEWER_TEMPERATURE = 0.2
 
 MAX_ATTEMPTS = int(os.environ.get("MAX_ATTEMPTS", "3"))
