@@ -10,17 +10,27 @@ interface Props {
 }
 
 /** Masthead. Everything in it is read off /api/health, nothing is hardcoded. */
-export function HealthBar({ health, error, loading, degraded }: Props) {
-  const tone = loading
-    ? { dot: "bg-ink-faint", text: "text-ink-faint", label: "Contacting backend" }
-    : error || !health
-      ? { dot: "bg-bad", text: "text-bad", label: "Backend unreachable" }
-      : degraded
-        ? // Health said yes at load; something has since failed to connect.
-          { dot: "bg-bad", text: "text-bad", label: "Backend stopped answering" }
-        : !health.mistral_key
-          ? { dot: "bg-bad", text: "text-bad", label: "No Mistral key" }
-          : { dot: "bg-ok", text: "text-ok", label: "Backend ready" };
+const tone = loading
+  ? { dot: "bg-ink-faint", text: "text-ink-faint", label: "Contacting backend" }
+  : error || !health
+    ? { dot: "bg-bad", text: "text-bad", label: "Backend unreachable" }
+    : degraded
+      ? {
+          dot: "bg-bad",
+          text: "text-bad",
+          label: "Backend stopped answering",
+        }
+      : !health.groq_key
+        ? {
+            dot: "bg-bad",
+            text: "text-bad",
+            label: "No Groq key",
+          }
+        : {
+            dot: "bg-ok",
+            text: "text-ok",
+            label: "Backend ready",
+          };
 
   return (
     <header className="border-b border-rule">
