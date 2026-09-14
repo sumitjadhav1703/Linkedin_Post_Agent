@@ -28,7 +28,7 @@ REVIEWER_MODEL = os.environ.get(
 
 REVIEWER_TEMPERATURE = 0.2
 
-MAX_ATTEMPTS = int(os.environ.get("MAX_ATTEMPTS", "3"))
+MAX_ATTEMPTS = int(os.environ.get("MAX_ATTEMPTS", "2"))
 
 LLM_MAX_RETRIES = 2
 LLM_RETRY_BASE_DELAY = 1.0
