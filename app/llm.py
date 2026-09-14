@@ -36,7 +36,7 @@ def make_reviewer_llm() -> ChatGroq:
 
 
 def invoke_with_retry(runnable: Any, payload: Any, *, what: str) -> Any:
-    """Invoke a runnable, retrying transient provider failures."""
+    """Invoke a runnable with retries only for transient failures."""
 
     last_error: Exception | None = None
 
@@ -46,6 +46,12 @@ def invoke_with_retry(runnable: Any, payload: Any, *, what: str) -> Any:
 
         except Exception as exc:  # noqa: BLE001
             last_error = exc
+            message = str(exc)
+
+            # Permanent request/configuration errors should not be retried.
+            if "400 Bad Request" in message or "tool_use_failed" in message:
+                logger.error("%s failed with a non-retryable error: %s", what, exc)
+                raise LLMError(f"{what} call failed: {exc}") from exc
 
             if attempt < config.LLM_MAX_RETRIES:
                 delay = config.LLM_RETRY_BASE_DELAY * (2 ** attempt)
@@ -60,7 +66,6 @@ def invoke_with_retry(runnable: Any, payload: Any, *, what: str) -> Any:
                 )
 
                 time.sleep(delay)
-
             else:
                 logger.error(
                     "%s call failed after %d attempts: %s",
