@@ -8,7 +8,7 @@ export const API_BASE =
 
 export interface Health {
   status: string;
-  mistral_key: boolean;
+  groq_key: boolean;
   tavily_key: boolean;
   writer_model: string;
   reviewer_model: string;
