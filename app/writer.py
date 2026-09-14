@@ -43,10 +43,11 @@ def _get_writer_llm(with_tools: bool):
         return _writer_llm
 
     if _writer_llm_with_tools is None:
-    _writer_llm_with_tools = _writer_llm.bind_tools(
-        tools.get_tools(),
-        tool_choice="auto",
-    )
+        _writer_llm_with_tools = _writer_llm.bind_tools(
+            tools.get_tools(),
+            tool_choice="auto",
+        )
+
     return _writer_llm_with_tools
 
 
