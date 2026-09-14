@@ -52,7 +52,7 @@ CORS_ORIGINS = [
     if origin.strip()
 ]
 
-MISTRAL_KEY_NAME = "MISTRAL_API_KEY"
+GROQ_KEY_NAME = "GROQ_API_KEY"
 TAVILY_KEY_NAME = "TAVILY_API_KEY"
 
 _LOGGING_CONFIGURED = False
@@ -76,10 +76,9 @@ def has_key(name: str) -> bool:
     return bool(os.environ.get(name))
 
 
-def require_mistral_key() -> None:
-    """Fail fast with an actionable message rather than deep inside a call."""
-    if not has_key(MISTRAL_KEY_NAME):
+def require_groq_key() -> None:
+    if not has_key(GROQ_KEY_NAME):
         raise RuntimeError(
-            f"{MISTRAL_KEY_NAME} is not set. Add it to your .env file or export it "
+            f"{GROQ_KEY_NAME} is not set. Add it to your .env file or export it "
             "before starting the app."
         )
