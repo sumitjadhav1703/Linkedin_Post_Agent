@@ -60,9 +60,9 @@ export function App() {
           </div>
         )}
 
-        {health.data && !health.data.mistral_key && <SetupNotice />}
+        {health.data && !health.data.groq_key && <SetupNotice />}
 
-        {health.data && health.data.mistral_key && (
+        {health.data && health.data.groq_key && (
           <div className="mt-12">
             <ModeToggle mode={mode} onChange={setMode} locked={locked} />
 
@@ -193,13 +193,18 @@ function Explainer({ steps, note }: { steps: string[]; note: string }) {
 function SetupNotice() {
   return (
     <section className="mt-10 max-w-2xl rounded-lg border border-warn/40 bg-warn-wash p-6">
-      <h2 className="label text-warn">Backend has no Mistral key</h2>
+      <h2 className="label text-warn">Backend has no Groq key</h2>
+
       <p className="mt-3 text-sm leading-relaxed text-ink-soft">
-        The API is up and answering, but <code className="font-mono text-xs">/api/health</code>{" "}
-        reports <code className="font-mono text-xs">mistral_key: false</code>, so neither mode
-        can write anything. Put <code className="font-mono text-xs">MISTRAL_API_KEY</code> in the
-        backend's <code className="font-mono text-xs">.env</code> and restart it.
+        The API is up and answering, but{" "}
+        <code className="font-mono text-xs">/api/health</code>{" "}
+        reports{" "}
+        <code className="font-mono text-xs">groq_key: false</code>,
+        so neither mode can write anything. Put{" "}
+        <code className="font-mono text-xs">GROQ_API_KEY</code>{" "}
+        in the backend environment and restart it.
       </p>
+
       <p className="mt-3 text-xs leading-relaxed text-ink-faint">
         Health reports presence only — no key value ever reaches this page.
       </p>
