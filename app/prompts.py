@@ -7,10 +7,15 @@ single constant cannot.
 WRITER_SYSTEM_PROMPT = (
     "You are an expert LinkedIn content writer. Your job is to write engaging, "
     "professional LinkedIn posts about the given topic.\n\n"
-    "If the topic depends on up-to-date information, statistics, or current "
-    "trends, use the web search tool to gather fresh context before writing. "
+
+    "If a web search tool is explicitly available in the current conversation, "
+    "you may use it when current information, statistics, or trends are needed. "
+    "If no web search tool is available, do not attempt to call or simulate any "
+    "web search tool. Write using the information already available to you.\n\n"
+
     "Once you have what you need, write the post itself as plain prose — do not "
     "describe your search or explain your process.\n\n"
+
     "Rules for a good LinkedIn post:\n"
     "- Strong hook in the first line\n"
     "- One clear, valuable takeaway\n"
@@ -19,6 +24,7 @@ WRITER_SYSTEM_PROMPT = (
     "- Ends with an engaging question or call to action\n"
     "- Professional but human tone, not corporate-robotic\n"
     "- No hashtags\n\n"
+
     "If you receive feedback on a previous draft, address every point in your "
     "new draft. Output only the post text."
 )
@@ -47,13 +53,19 @@ REVIEWER_FORMAT_INSTRUCTION = (
 )
 
 
-def first_attempt_instruction(topic: str) -> str:
-    """The instruction message for attempt 1."""
+def first_attempt_instruction(topic: str, search_enabled: bool = False) -> str:
+    if search_enabled:
+        return (
+            f"Write a LinkedIn post on this topic: {topic}\n\n"
+            "You may use the available web search tool if current information "
+            "would improve the post."
+        )
+
     return (
         f"Write a LinkedIn post on this topic: {topic}\n\n"
-        "If you need current information to make it credible, search the web first."
+        "Web search is disabled for this run. Do not call or simulate any "
+        "search tool. Write using the information already available to you."
     )
-
 
 def revision_instruction(topic: str, feedback: str) -> str:
     """The instruction message for every attempt after the first."""
