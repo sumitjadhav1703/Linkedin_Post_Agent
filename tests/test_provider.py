@@ -9,6 +9,7 @@ from app import config
 class ProviderTests(unittest.TestCase):
     def test_nvidia_configuration_is_used(self):
         self.assertEqual(getattr(config, 'NVIDIA_KEY_NAME', None), 'NVIDIA_API_KEY')
+        self.assertEqual(config.WRITER_MODEL, 'nvidia/nemotron-3.5-lightning-30b-a3b')
         from app import llm
         with patch.dict(os.environ, {'NVIDIA_API_KEY': 'test-placeholder'}), patch('app.llm.ChatNVIDIA') as model:
             llm.make_writer_llm()
@@ -18,6 +19,8 @@ class ProviderTests(unittest.TestCase):
             self.assertEqual(call.kwargs['base_url'], 'https://integrate.api.nvidia.com/v1')
             self.assertLessEqual(call.kwargs['max_completion_tokens'], 2048)
             self.assertEqual(call.kwargs['timeout'], 45)
+            self.assertEqual(call.kwargs['model_kwargs']['chat_template_kwargs']['enable_thinking'], False)
+            self.assertEqual(call.kwargs['model_kwargs']['tool_choice'], 'none')
 
     def test_real_nvidia_factories_and_bindings_are_offline(self):
         from app import reviewer
@@ -28,7 +31,7 @@ class ProviderTests(unittest.TestCase):
             with patch.object(reviewer, '_reviewer_llm', None), patch.object(reviewer, '_structured_reviewer', None):
                 plain, structured = reviewer._get_reviewers()
                 self.assertIsNotNone(structured)
-                self.assertEqual(plain.model, 'meta/llama-3.3-70b-instruct')
+                self.assertEqual(plain.model, 'nvidia/nemotron-3.5-lightning-30b-a3b')
 
     def test_real_structured_reviewer_parses_one_mocked_http_call(self):
         import json
@@ -67,7 +70,7 @@ class ProviderTests(unittest.TestCase):
 
     def test_permanent_errors_do_not_retry(self):
         from app.llm import LLMError, invoke_with_retry
-        for code in (400, 401, 403, 404, 422):
+        for code in (400, 401, 403, 404, 410, 422):
             runnable = MagicMock()
             runnable.invoke.side_effect = Exception(f'[{code}] private')
             with self.subTest(code=code), patch('app.llm.time.sleep') as sleep:

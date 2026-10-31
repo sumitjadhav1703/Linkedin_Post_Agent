@@ -109,9 +109,15 @@ def writer_node(state: PostState) -> dict:
 
     try:
         llm = _get_writer_llm(with_tools)
+        messages = [SystemMessage(content=prompts.WRITER_SYSTEM_PROMPT)] + state["messages"]
+        if state.get("enable_search") and not with_tools:
+            messages = messages + [HumanMessage(content=(
+                "Search is now disabled. Use the evidence already gathered and write "
+                "the final LinkedIn post now. Do not request or simulate another tool call."
+            ))]
         response = invoke_with_retry(
             llm,
-            [SystemMessage(content=prompts.WRITER_SYSTEM_PROMPT)] + state["messages"],
+            messages,
             what="writer",
         )
     except (LLMError, RuntimeError) as exc:

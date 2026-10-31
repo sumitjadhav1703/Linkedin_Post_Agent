@@ -24,14 +24,16 @@ def make_writer_llm() -> ChatNVIDIA:
     config.require_nvidia_key()
     return ChatNVIDIA(model=config.WRITER_MODEL, base_url=config.NVIDIA_BASE_URL,
                       temperature=config.WRITER_TEMPERATURE, max_completion_tokens=1024,
-                      timeout=45, usage_telemetry_enabled=False)
+                      timeout=45, usage_telemetry_enabled=False,
+                      model_kwargs={"chat_template_kwargs": {"enable_thinking": False}, "tool_choice": "none"})
 
 
 def make_reviewer_llm() -> ChatNVIDIA:
     config.require_nvidia_key()
     return ChatNVIDIA(model=config.REVIEWER_MODEL, base_url=config.NVIDIA_BASE_URL,
                       temperature=config.REVIEWER_TEMPERATURE, max_completion_tokens=512,
-                      timeout=45, usage_telemetry_enabled=False)
+                      timeout=45, usage_telemetry_enabled=False,
+                      model_kwargs={"chat_template_kwargs": {"enable_thinking": False}, "tool_choice": "none"})
 
 
 def invoke_with_retry(runnable: Any, payload: Any, *, what: str) -> Any:
@@ -61,8 +63,8 @@ def invoke_with_retry(runnable: Any, payload: Any, *, what: str) -> Any:
                 message = 'NVIDIA usage limit reached. Wait before retrying and check your API-catalog quota. Your existing draft remains available.'
             elif status in (401, 403):
                 message = 'NVIDIA rejected API access. Check NVIDIA_API_KEY and model access on the backend.'
-            elif status == 404:
-                message = 'The configured NVIDIA model is unavailable. Check the model IDs on the backend.'
+            elif status in (404, 410):
+                message = 'The configured NVIDIA model is unavailable or retired. Update the backend model before retrying.'
             elif transient:
                 message = 'NVIDIA did not respond successfully. Wait briefly before retrying.'
             else:
