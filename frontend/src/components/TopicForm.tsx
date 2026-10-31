@@ -20,7 +20,7 @@ const COPY: Record<Mode, { cta: string; busy: string; hint: string }> = {
   auto: {
     cta: "Run the loop",
     busy: "Starting…",
-    hint: "It will run to a verdict on its own. Usually 15–45 seconds.",
+    hint: "It will run to a verdict on its own. Response time depends on model availability.",
   },
 };
 

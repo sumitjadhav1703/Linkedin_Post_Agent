@@ -14,6 +14,7 @@ import logging
 import re
 
 from pydantic import BaseModel, Field
+from langchain_core.output_parsers.openai_tools import PydanticToolsParser
 
 from app import config, prompts
 from app.llm import LLMError, invoke_with_retry, make_reviewer_llm
@@ -48,7 +49,10 @@ def _get_reviewers():
     global _reviewer_llm, _structured_reviewer
     if _reviewer_llm is None:
         _reviewer_llm = make_reviewer_llm()
-        _structured_reviewer = _reviewer_llm.with_structured_output(ReviewVerdict)
+        # ChatNVIDIA.with_structured_output retries multiple formats even on 429.
+        _structured_reviewer = _reviewer_llm.bind_tools(
+            [ReviewVerdict], tool_choice="ReviewVerdict"
+        ) | PydanticToolsParser(tools=[ReviewVerdict], first_tool_only=True)
     return _reviewer_llm, _structured_reviewer
 
 
@@ -95,15 +99,14 @@ def _review_with_fallback(draft: str) -> ReviewVerdict:
                 "Structured reviewer returned %s, not a verdict — falling back.",
                 type(result).__name__,
             )
-        except Exception as exc:  # noqa: BLE001
-            # Includes LLMError. Latch the failure so a provider that does not
-            # support structured output does not pay the retry cost every loop.
+        except LLMError as exc:
+            if not exc.allow_fallback:
+                raise
             _structured_output_broken = True
-            logger.warning(
-                "Structured output unavailable (%s) — using the text parser from "
-                "here on.",
-                exc,
-            )
+            logger.warning("Structured review unsupported; using text review.")
+        except (ValueError, NotImplementedError):
+            _structured_output_broken = True
+            logger.warning("Structured review could not be parsed; using text review.")
 
     response = invoke_with_retry(
         plain_llm,
@@ -135,7 +138,7 @@ def reviewer_node(state: PostState) -> dict:
         verdict = _review_with_fallback(draft)
     except LLMError as exc:
         logger.error("Reviewer node failed: %s", exc)
-        return {"error": str(exc)}
+        return {"error": str(exc), "error_status": exc.status_code}
 
     logger.info(
         "Attempt %d/%d verdict: %s",

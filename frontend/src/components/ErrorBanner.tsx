@@ -18,14 +18,17 @@ function explain(error: ApiError): { heading: string; body: string } {
   if (error.isOffline) {
     return {
       heading: "Backend not answering",
-      body: `Nothing responded at ${API_BASE}. Start the API with \`uvicorn app.api:app --port 8000\`, then retry — the run above is lost either way.`,
+      body: `Could not reach ${API_BASE}. The server may still be working. Reconnect to check progress before starting another run.`,
     };
   }
   if (error.isExpiredSession) {
     return {
-      heading: "Session expired",
-      body: "The server no longer holds this session. Sessions live in process memory, so restarting the backend clears every one of them. The draft above is still readable, but it can't be continued — start over to open a new one.",
+      heading: "Session unavailable",
+      body: "This session cannot continue after a failure, expiry, or backend restart. Keep the draft above, then start a new session.",
     };
+  }
+  if (error.status === 429) {
+    return { heading: "NVIDIA usage limit reached", body: error.detail };
   }
   if (error.status === 502) {
     return {

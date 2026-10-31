@@ -21,7 +21,7 @@ def run_auto_job(job_id: str, topic: str, enable_search: bool) -> None:
     Runs on a worker thread. Never raises: any failure is written to the job
     record so the polling endpoint can report it.
     """
-    logger.info("Auto job %s starting: %r (search=%s)", job_id, topic, enable_search)
+    logger.info("Auto job %s starting (search=%s)", job_id, enable_search)
 
     state = initial_state(topic, enable_search)
     attempt = 0
@@ -50,11 +50,13 @@ def run_auto_job(job_id: str, topic: str, enable_search: bool) -> None:
                     )
 
                 if update.get("error"):
-                    raise RuntimeError(update["error"])
+                    jobs.update_job(job_id, status="error", error=update["error"],
+                                    error_status=update.get("error_status"), stop_reason="error")
+                    return
 
     except Exception as exc:  # noqa: BLE001 - the job record is the error channel
-        logger.error("Auto job %s failed: %s", job_id, exc, exc_info=True)
-        jobs.update_job(job_id, status="error", error=str(exc), stop_reason="error")
+        logger.error("Auto job %s failed: type=%s", job_id, type(exc).__name__)
+        jobs.update_job(job_id, status="error", error="Generation stopped unexpectedly. Keep any saved draft and start a new session.", stop_reason="error")
         return
 
     final.setdefault("attempt", attempt)

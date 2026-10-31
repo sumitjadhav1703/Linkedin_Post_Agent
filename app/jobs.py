@@ -73,6 +73,7 @@ def record_draft(job_id: str, attempt: int, draft: str) -> None:
         job = _jobs.get(job_id)
         if job is None:
             return
+        job["draft"] = draft
         job["attempt"] = attempt
         job["history"].append(
             {"attempt": attempt, "draft": draft, "approved": None, "feedback": None}

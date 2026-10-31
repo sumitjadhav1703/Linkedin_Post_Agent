@@ -78,7 +78,7 @@ export function useAutoSession() {
           stopReason: res.stop_reason,
           // A job that failed server-side reports it in the payload, not the
           // status code — the poll itself succeeded.
-          error: res.error ? new ApiError(502, res.error) : null,
+          error: res.error ? new ApiError(res.error_status === 429 ? 429 : 502, res.error) : null,
           polls: prev.polls + 1,
         }));
 

@@ -13,7 +13,7 @@ import logging
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from langgraph.types import Command
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app import config, jobs
 from app.graph_hitl import REVIEW_INSTRUCTION, app_hitl
@@ -52,11 +52,24 @@ class StartRequest(BaseModel):
 
 
 class ResumeRequest(BaseModel):
-    thread_id: str = Field(min_length=1)
+    thread_id: str = Field(min_length=1, max_length=128)
     feedback: str = Field(min_length=1, max_length=4000)
+
+    @field_validator("feedback")
+    @classmethod
+    def feedback_not_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("feedback must not be blank")
+        return value
 
 
 # --- helpers ---------------------------------------------------------------
+
+
+def _require_provider() -> None:
+    if not config.has_key(config.NVIDIA_KEY_NAME):
+        raise HTTPException(status_code=503, detail="Configure NVIDIA_API_KEY on the backend before generating posts.")
 
 
 def _graph_config(thread_id: str) -> dict:
@@ -93,7 +106,7 @@ def _hitl_response(thread_id: str, result: dict) -> dict:
 
     if result.get("error"):
         jobs.update_session(thread_id, status="error")
-        raise HTTPException(status_code=502, detail=result["error"])
+        raise HTTPException(status_code=429 if result.get("error_status") == 429 else 502, detail=result["error"])
 
     jobs.update_session(thread_id, status="completed")
     return {
@@ -114,7 +127,8 @@ def health() -> dict:
     """Report configuration and key presence. Never exposes key values."""
     return {
         "status": "ok",
-        "groq_key": config.has_key(config.GROQ_KEY_NAME),
+        "provider": "nvidia",
+        "nvidia_key": config.has_key(config.NVIDIA_KEY_NAME),
         "tavily_key": config.has_key(config.TAVILY_KEY_NAME),
         "writer_model": config.WRITER_MODEL,
         "reviewer_model": config.REVIEWER_MODEL,
@@ -129,8 +143,9 @@ async def hitl_start(request: StartRequest) -> dict:
     if not topic:
         raise HTTPException(status_code=400, detail="topic must not be empty")
 
+    _require_provider()
     thread_id = jobs.create_session(topic, request.enable_search)
-    logger.info("HITL session %s starting: %r", thread_id, topic)
+    logger.info("HITL session %s starting", thread_id)
 
     try:
         result = await asyncio.to_thread(
@@ -140,11 +155,11 @@ async def hitl_start(request: StartRequest) -> dict:
         )
     except LLMError as exc:
         jobs.update_session(thread_id, status="error")
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(status_code=429 if exc.status_code == 429 else 502, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
-        logger.error("HITL session %s crashed: %s", thread_id, exc, exc_info=True)
+        logger.error("HITL session %s crashed: type=%s", thread_id, type(exc).__name__)
         jobs.update_session(thread_id, status="error")
-        raise HTTPException(status_code=500, detail=f"Graph failed: {exc}") from exc
+        raise HTTPException(status_code=500, detail="Generation failed unexpectedly. Check backend configuration and start a new session.") from exc
 
     return _hitl_response(thread_id, result)
 
@@ -154,7 +169,8 @@ async def hitl_resume(request: ResumeRequest) -> dict:
     """Resume a paused session with the human's verdict."""
     thread_id = request.thread_id
 
-    if jobs.get_session(thread_id) is None:
+    session = jobs.get_session(thread_id)
+    if session is None:
         # In-memory sessions do not survive a restart or an eviction, and the
         # frontend needs to tell that apart from a bad id.
         raise HTTPException(
@@ -162,6 +178,9 @@ async def hitl_resume(request: ResumeRequest) -> dict:
             detail="Unknown or expired thread_id. Start a new session.",
         )
 
+    if session["status"] != "awaiting_review":
+        raise HTTPException(status_code=410, detail="This session can no longer be resumed. Keep your saved draft and start a new session.")
+    _require_provider()
     logger.info("HITL session %s resuming", thread_id)
 
     try:
@@ -172,11 +191,11 @@ async def hitl_resume(request: ResumeRequest) -> dict:
         )
     except LLMError as exc:
         jobs.update_session(thread_id, status="error")
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise HTTPException(status_code=429 if exc.status_code == 429 else 502, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
-        logger.error("HITL session %s crashed: %s", thread_id, exc, exc_info=True)
+        logger.error("HITL session %s crashed: type=%s", thread_id, type(exc).__name__)
         jobs.update_session(thread_id, status="error")
-        raise HTTPException(status_code=500, detail=f"Graph failed: {exc}") from exc
+        raise HTTPException(status_code=500, detail="Generation failed unexpectedly. Check backend configuration and start a new session.") from exc
 
     return _hitl_response(thread_id, result)
 
@@ -188,6 +207,7 @@ async def auto_start(request: StartRequest, background: BackgroundTasks) -> dict
     if not topic:
         raise HTTPException(status_code=400, detail="topic must not be empty")
 
+    _require_provider()
     job_id = jobs.create_job(topic, request.enable_search)
     background.add_task(
         asyncio.to_thread, run_auto_job, job_id, topic, request.enable_search
@@ -212,6 +232,7 @@ def auto_status(job_id: str) -> dict:
         "is_approved": job["is_approved"],
         "stop_reason": job["stop_reason"],
         "error": job["error"],
+        "error_status": job.get("error_status"),
     }
 
 

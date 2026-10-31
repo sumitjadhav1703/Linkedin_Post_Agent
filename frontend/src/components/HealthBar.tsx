@@ -34,16 +34,16 @@ export function HealthBar({
             text: "text-bad",
             label: "Backend stopped answering",
           }
-        : !health.groq_key
+        : !health.nvidia_key
           ? {
               dot: "bg-bad",
               text: "text-bad",
-              label: "No Groq key",
+              label: "No NVIDIA key",
             }
           : {
               dot: "bg-ok",
               text: "text-ok",
-              label: "Backend ready",
+              label: "Backend configured",
             };
 
   return (

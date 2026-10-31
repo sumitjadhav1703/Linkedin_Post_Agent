@@ -52,7 +52,8 @@ def _get_writer_llm(with_tools: bool):
 
 
 def _use_tools(state: PostState) -> bool:
-    return bool(state.get("enable_search")) and tools.search_available()
+    return (bool(state.get("enable_search")) and tools.search_available()
+            and state.get("tool_rounds", 0) < MAX_TOOL_ROUNDS)
 
 
 def _as_text(content) -> str:
@@ -83,11 +84,8 @@ def prepare_attempt_node(state: PostState) -> dict:
     if attempt == 1:
         instruction = prompts.first_attempt_instruction(
             topic,
-            search_enabled=(
-                bool(state.get("enable_search"))
-                and tools.search_available()
-        ),
-    )
+            search_enabled=bool(state.get("enable_search")) and tools.search_available(),
+        )
     else:
         instruction = prompts.revision_instruction(topic, feedback)
 
@@ -95,6 +93,7 @@ def prepare_attempt_node(state: PostState) -> dict:
 
     return {
         "attempt": attempt,
+        "tool_rounds": 0,
         "messages": [HumanMessage(content=instruction)],
     }
 
@@ -117,12 +116,15 @@ def writer_node(state: PostState) -> dict:
         )
     except (LLMError, RuntimeError) as exc:
         logger.error("Writer node failed: %s", exc)
-        return {"error": str(exc)}
+        return {"error": str(exc), "error_status": getattr(exc, "status_code", None)}
 
     if getattr(response, "tool_calls", None):
         logger.info("Writer requested %d search call(s)", len(response.tool_calls))
 
-    return {"messages": [response]}
+    if getattr(response, "tool_calls", None) and not with_tools:
+        return {"error": "The writer requested a tool after search was disabled."}
+    return {"messages": [response], "tool_rounds": state.get("tool_rounds", 0)
+            + bool(getattr(response, "tool_calls", None))}
 
 
 def extract_draft_node(state: PostState) -> dict:
@@ -138,6 +140,9 @@ def extract_draft_node(state: PostState) -> dict:
     if not isinstance(last, AIMessage):
         logger.error("Expected an AI message to extract, got %s", type(last).__name__)
         return {"error": "The writer did not produce a response."}
+
+    if getattr(last, "tool_calls", None):
+        return {"error": "The writer did not finish its tool requests."}
 
     draft = _as_text(getattr(last, "content", ""))
 
@@ -163,17 +168,6 @@ def route_after_writer(state: PostState) -> str:
     if not getattr(last, "tool_calls", None):
         return WRITER_EXIT_NODE
 
-    tool_rounds = sum(
-        1
-        for message in state["messages"]
-        if isinstance(message, AIMessage) and getattr(message, "tool_calls", None)
-    )
-    if tool_rounds > MAX_TOOL_ROUNDS:
-        logger.warning(
-            "Hit the %d-round search cap — writing with the context gathered so far.",
-            MAX_TOOL_ROUNDS,
-        )
-        return WRITER_EXIT_NODE
 
     return "tools"
 
