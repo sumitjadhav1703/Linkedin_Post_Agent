@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Both graphs share the writer. These model IDs refer to NVIDIA hosted endpoints.
-WRITER_MODEL = "meta/llama-3.3-70b-instruct"
+WRITER_MODEL = "nvidia/nemotron-3.5-lightning-30b-a3b"
 
 WRITER_TEMPERATURE = 0.7
 

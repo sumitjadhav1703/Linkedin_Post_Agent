@@ -21,6 +21,8 @@ class WriterBudgetTests(unittest.TestCase):
             result = writer.writer_node(state)
         get.assert_called_once_with(False)
         self.assertEqual(result['messages'][0].content, 'Final post')
+        sent = get.return_value.invoke.call_args.args[0]
+        self.assertIn('Search is now disabled', sent[-1].content)
 
     def test_tool_call_content_is_never_presented_as_a_finished_post(self):
         state = initial_state('AI')

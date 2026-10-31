@@ -5,7 +5,7 @@
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![Vite](https://img.shields.io/badge/Vite-8-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
 [![LangGraph](https://img.shields.io/badge/LangGraph-0.2.60-ff7f50)](https://langchain-ai.github.io/langgraph/)
-[![NVIDIA](https://img.shields.io/badge/NVIDIA-Free_Endpoint-76B900?logo=nvidia&logoColor=white)](https://build.nvidia.com/meta/llama-3_3-70b-instruct?nim=hosted)
+[![NVIDIA](https://img.shields.io/badge/NVIDIA-Free_Endpoint-76B900?logo=nvidia&logoColor=white)](https://build.nvidia.com/nvidia/nemotron-3.5-lightning-30b-a3b)
 [![Tavily](https://img.shields.io/badge/Tavily-0.1.0-blue)](https://tavily.com/)
 [![Vercel](https://img.shields.io/badge/Vercel-Deployed-000000?logo=vercel&logoColor=white)](https://linkedin-post-agent-two.vercel.app/)
 [![Render](https://img.shields.io/badge/Render-Deployed-46E3B7?logo=render&logoColor=white)](https://linkedin-post-agent-6mrm.onrender.com)
@@ -218,10 +218,11 @@ flowchart LR
 
 ## NVIDIA free endpoint setup
 
-Both writer and reviewer use **`meta/llama-3.3-70b-instruct`**, currently listed
-as a [Free Endpoint in NVIDIA's catalog](https://build.nvidia.com/meta/llama-3_3-70b-instruct?nim=hosted),
+Both writer and reviewer use **`nvidia/nemotron-3.5-lightning-30b-a3b`**, currently listed
+as a [Free Endpoint in NVIDIA's catalog](https://build.nvidia.com/nvidia/nemotron-3.5-lightning-30b-a3b),
 at `https://integrate.api.nvidia.com/v1`. The model is fixed in `app/config.py`;
-there is no paid fallback or automatic provider switching. Free access remains
+thinking is disabled to keep the short-post token budget focused on output.
+There is no paid fallback or automatic provider switching. Free access remains
 subject to NVIDIA account quotas and evaluation terms; it is not unlimited
 production hosting. Check your account's current access before running it.
 
@@ -296,3 +297,11 @@ checks. Frontend packages are locked in `frontend/package-lock.json`.
 These tests use mocked provider responses. They establish routing, parsing,
 error handling, and frontend compatibility—not live quota availability or
 LinkedIn post quality. Existing screenshots predate this provider migration.
+
+### Live availability check
+
+The earlier Llama 3.3 endpoint returned HTTP 410 (retired) even though its
+catalog page remained searchable. The replacement is selected from NVIDIA's
+live `/models` list and must pass real inference, tool-call, and review checks.
+A successful health response reports key presence, not model availability.
+HTTP 410 now gives an actionable model-retirement message and is not retried.
