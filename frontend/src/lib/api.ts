@@ -4,11 +4,12 @@
 // what it was handed and echoes it back. It never mints one.
 
 export const API_BASE =
-  (import.meta.env.VITE_API_BASE as string | undefined) ?? "http://localhost:8000";
+  (import.meta.env?.VITE_API_BASE as string | undefined) ?? "http://localhost:8000";
 
 export interface Health {
   status: string;
-  groq_key: boolean;
+  provider: "nvidia";
+  nvidia_key: boolean;
   tavily_key: boolean;
   writer_model: string;
   reviewer_model: string;
@@ -56,6 +57,7 @@ export interface AutoStatusResponse {
   is_approved: boolean | null;
   stop_reason: StopReason | null;
   error: string | null;
+  error_status?: number | null;
 }
 
 /**
@@ -83,7 +85,7 @@ export class ApiError extends Error {
 
   /** In-memory session state is gone; the run cannot be continued. */
   get isExpiredSession(): boolean {
-    return this.status === 404;
+    return this.status === 404 || this.status === 410;
   }
 }
 
@@ -92,34 +94,35 @@ export function toApiError(err: unknown): ApiError {
   return new ApiError(0, err instanceof Error ? err.message : "Unexpected error");
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, init?: RequestInit, timeoutMs = 15000): Promise<T> {
   let res: Response;
+  let text: string;
   try {
-    res = await fetch(`${API_BASE}${path}`, {
+    res = await fetch(`${API_BASE.replace(/\/+$/, "")}${path}`, {
       ...init,
+      signal: AbortSignal.timeout(timeoutMs),
       headers: { "content-type": "application/json", ...init?.headers },
     });
+    text = await res.text();
   } catch {
-    throw new ApiError(0, `Could not reach the backend at ${API_BASE}.`);
+    throw new ApiError(0, `Could not complete the request to ${API_BASE}. The server may still be running the job; check its progress before starting another run.`);
   }
 
-  const text = await res.text();
   let body: unknown = null;
   try {
     body = text ? JSON.parse(text) : null;
   } catch {
-    // A non-JSON body from a proxy or crash handler. Fall through with null and
-    // let the status code carry the meaning.
+    // Proxies may return HTML instead of the expected JSON contract.
   }
-
   if (!res.ok) {
-    const detail =
-      body && typeof body === "object" && "detail" in body
-        ? String((body as { detail: unknown }).detail)
-        : res.statusText || `Request failed with ${res.status}`;
+    const detail = body && typeof body === "object" && "detail" in body
+      ? String((body as { detail: unknown }).detail)
+      : res.statusText || `Request failed with ${res.status}`;
     throw new ApiError(res.status, detail);
   }
-
+  if (!body || typeof body !== "object") {
+    throw new ApiError(502, "The backend returned an invalid response. Check service availability before retrying.");
+  }
   return body as T;
 }
 
@@ -129,13 +132,13 @@ export const hitlStart = (topic: string, enableSearch: boolean) =>
   request<HitlResponse>("/api/hitl/start", {
     method: "POST",
     body: JSON.stringify({ topic, enable_search: enableSearch }),
-  });
+  }, 180000);
 
 export const hitlResume = (threadId: string, feedback: string) =>
   request<HitlResponse>("/api/hitl/resume", {
     method: "POST",
     body: JSON.stringify({ thread_id: threadId, feedback }),
-  });
+  }, 180000);
 
 export const autoStart = (topic: string, enableSearch: boolean) =>
   request<AutoStartResponse>("/api/auto/start", {

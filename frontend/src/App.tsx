@@ -27,7 +27,7 @@ export function App() {
   // otherwise leave a green light in the masthead over a failing page.
   const offline = Boolean(hitl.state.error?.isOffline || auto.state.error?.isOffline);
 
-  const maxAttempts = health.data?.max_attempts ?? 3;
+  const maxAttempts = health.data?.max_attempts ?? 2;
   const sessionId =
     mode === "hitl" ? hitl.state.threadId : auto.state.jobId;
 
@@ -49,7 +49,7 @@ export function App() {
           </h1>
           <p className="mt-5 max-w-xl text-base leading-relaxed text-ink-soft">
             The same LangGraph writer drafts a LinkedIn post either way — same model,
-            same prompts, same three-attempt ceiling. The only node that changes is the
+            same prompts, same {maxAttempts}-attempt ceiling. The only node that changes is the
             one that says yes or no.
           </p>
         </section>
@@ -60,9 +60,9 @@ export function App() {
           </div>
         )}
 
-        {health.data && !health.data.groq_key && <SetupNotice />}
+        {health.data && !health.data.nvidia_key && <SetupNotice />}
 
-        {health.data && health.data.groq_key && (
+        {health.data && health.data.nvidia_key && (
           <div className="mt-12">
             <ModeToggle mode={mode} onChange={setMode} locked={locked} />
 
@@ -193,15 +193,15 @@ function Explainer({ steps, note }: { steps: string[]; note: string }) {
 function SetupNotice() {
   return (
     <section className="mt-10 max-w-2xl rounded-lg border border-warn/40 bg-warn-wash p-6">
-      <h2 className="label text-warn">Backend has no Groq key</h2>
+      <h2 className="label text-warn">Backend has no NVIDIA key</h2>
 
       <p className="mt-3 text-sm leading-relaxed text-ink-soft">
         The API is up and answering, but{" "}
         <code className="font-mono text-xs">/api/health</code>{" "}
         reports{" "}
-        <code className="font-mono text-xs">groq_key: false</code>,
+        <code className="font-mono text-xs">nvidia_key: false</code>,
         so neither mode can write anything. Put{" "}
-        <code className="font-mono text-xs">GROQ_API_KEY</code>{" "}
+        <code className="font-mono text-xs">NVIDIA_API_KEY</code>{" "}
         in the backend environment and restart it.
       </p>
 

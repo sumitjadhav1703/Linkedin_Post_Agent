@@ -68,10 +68,9 @@ tries, here's the last one" are different outcomes.
 ## Failure handling
 
 - **400** — blank topics are caught in the form; the request is never sent.
-- **404** — the session is gone from the server's memory. Retrying is pointless, so
+- **404 / 410** — the session is gone from the server's memory. Retrying is pointless, so
   only *Start over* is offered, and the copy explains why it happened.
-- **502** — the model call failed; `detail` is shown verbatim with a retry that
-  resends the same feedback.
+- **502** — the model call failed; the backend sends a safe error message. A failed graph session must be restarted; its previous draft stays visible.
 - **Network** — a poll tolerates two dropped requests before giving up, so a blip
   doesn't kill a run that is still going server-side. Nothing leaves a spinner
   running forever, and the masthead flips to *Backend stopped answering* once a
@@ -86,3 +85,18 @@ toggle and no first-paint flash. The mode toggle is a real tablist with arrow-ke
 navigation. The autonomous timeline announces through a dedicated `role="status"`
 region carrying one short sentence per change — putting `aria-live` on the timeline
 itself would re-read every draft on screen every 1.5 seconds.
+
+## NVIDIA backend contract
+
+The matching backend reports `provider: "nvidia"` and `nvidia_key` from
+`/api/health`. Deploy both layers together. Put `NVIDIA_API_KEY` and
+`TAVILY_API_KEY` on the backend only; the browser needs only `VITE_API_BASE`.
+The app displays key presence, not a live inference readiness check.
+
+Health/status requests time out after 15 seconds; human draft/revision requests
+allow 180 seconds. Timing out the browser does not cancel server work. Quota
+errors (429) are shown separately. Successful non-JSON proxy responses are
+rejected rather than accepted as application data.
+
+Run `npm test` with Node.js 24 for the HTTP-contract tests, followed by
+`npm run build` for TypeScript and production-bundle validation.

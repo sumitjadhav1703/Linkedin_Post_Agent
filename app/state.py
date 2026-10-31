@@ -24,11 +24,13 @@ class PostState(TypedDict):
     review_feedback: str
     is_approved: bool
     attempt: int
+    tool_rounds: int
 
     # Set by any node whose LLM or tool call failed. The router sends states
     # carrying an error straight to END so the API can surface it rather than
     # the process dying.
     error: Optional[str]
+    error_status: Optional[int]
 
     enable_search: bool
 
@@ -42,6 +44,8 @@ def initial_state(topic: str, enable_search: bool = False) -> PostState:
         "review_feedback": "",
         "is_approved": False,
         "attempt": 0,
+        "tool_rounds": 0,
         "error": None,
+        "error_status": None,
         "enable_search": enable_search,
     }
